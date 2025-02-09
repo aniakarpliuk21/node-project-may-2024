@@ -1,29 +1,59 @@
-import {IUser, IUserCreateDto, IUserUpdateDto} from "../interfaces/user.interface";
+import {
+    IUser,
+    IUserListQuery,
+    IUserListResponse,
+    IUserResponse,
+    IUserUpdateDto
+} from "../interfaces/user.interface";
 import {userRepository} from "../repositories/user.repository";
 import {ApiError} from "../errors/api-error";
+import {ITokenPayload} from "../interfaces/token.interface";
+import {userPresenter} from "../presenter/user.presenter";
 
 class UserService {
-    public async getList():Promise<IUser[]>{
-        return await userRepository.getList();
+    public async getList(query:IUserListQuery):Promise<IUserListResponse>{
+        const { entities, total } = await userRepository.getList(query);
+        return userPresenter.toResponseList(entities, total, query);
     }
-    public async create(dto:IUserCreateDto): Promise<IUser> {
-        await this.isEmailUnique(dto.email)
-        return await userRepository.create(dto);
-    }
-    private async isEmailUnique(email:string):Promise<void>{
+    public async isEmailUnique(email:string):Promise<void>{
         const user = await userRepository.getByEmail(email);
         if(user){
             throw new ApiError ("Email is already in use",409);
         }
     }
-    public async delete(userId: string): Promise<void> {
-        await userRepository.delete(userId);
+    public async delete(tokenPayload:ITokenPayload): Promise<void> {
+        const user = await userRepository.getUserById(tokenPayload.userId);
+        if (!user) {
+            throw new ApiError("User not found", 404);
+        }
+        await userRepository.delete(tokenPayload.userId);
     }
     public async getUserById(userId:string):Promise<IUser>{
         return await userRepository.getUserById(userId);
     }
-    public async updateUser(userId: string, dto: IUserUpdateDto): Promise<IUser> {
-        return await userRepository.updateUser(userId, dto);
+    public async getUserByEmail(email:string):Promise<IUserResponse>{
+        const user = await userRepository.getByEmail(email);
+        if (!user) {
+            throw new ApiError("User not found", 404);
+        }
+        return userPresenter.toResponse(user);
+
+    }    public async getMe(tokenPayload: ITokenPayload): Promise<IUser> {
+        const user = await userRepository.getUserById(tokenPayload.userId);
+        if (!user) {
+            throw new ApiError("User not found", 404);
+        }
+        return user;
+    }
+    public async updateUser(
+        tokenPayload: ITokenPayload,
+        dto: IUserUpdateDto,
+    ): Promise<IUser> {
+        const user = await userRepository.getUserById(tokenPayload.userId);
+        if (!user) {
+            throw new ApiError("User not found", 404);
+        }
+        return await userRepository.updateUser(tokenPayload.userId, dto);
     }
 }
 export const userService = new UserService();
